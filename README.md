@@ -1,5 +1,7 @@
 # zsh-offline
 
+[![Latest Release](https://img.shields.io/github/v/release/uranus0515/zsh-offline?display_name=tag)](https://github.com/uranus0515/zsh-offline/releases/latest)
+
 用于在 Ubuntu 目标机完全离线的场景下安装 `zsh + oh-my-zsh + 常用插件/主题` 的构建与安装脚本集合。
 
 ## 项目目标

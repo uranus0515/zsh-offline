@@ -60,7 +60,9 @@ default_version_for_codename() {
 }
 
 sanitize_token() {
-  echo "$1" | sed 's/[^0-9A-Za-z._-]/_/g'
+  local token="$1"
+  token="${token//[^0-9A-Za-z._-]/_}"
+  echo "${token}"
 }
 
 usage() {
@@ -98,7 +100,7 @@ clone_and_archive() {
     clone_cmd=(timeout 180 git clone --depth=1 "${repo_url}" "${temp_dir}/${folder_name}")
   else
     clone_cmd=(git clone --depth=1 "${repo_url}" "${temp_dir}/${folder_name}")
-    log_warn "`timeout` is unavailable; clone timeout protection is disabled on this host."
+    log_warn "'timeout' command is unavailable; clone timeout protection is disabled on this host."
   fi
   while (( attempt <= max_retries )); do
     rm -rf "${temp_dir:?}/${folder_name}"

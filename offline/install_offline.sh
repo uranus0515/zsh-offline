@@ -7,17 +7,15 @@ ARCHIVE_DIR="${BUNDLE_DIR}/archives"
 ZSHRC_TEMPLATE="${BUNDLE_DIR}/zshrc.template"
 
 CURRENT_USER="$(id -un)"
-if [[ -n "${TARGET_USER:-}" ]]; then
-  TARGET_USER="${TARGET_USER}"
-elif [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
-  TARGET_USER="${SUDO_USER}"
-else
-  TARGET_USER="${CURRENT_USER}"
+if [[ -z "${TARGET_USER:-}" ]]; then
+  if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
+    TARGET_USER="${SUDO_USER}"
+  else
+    TARGET_USER="${CURRENT_USER}"
+  fi
 fi
 
-if [[ -n "${TARGET_HOME:-}" ]]; then
-  TARGET_HOME="${TARGET_HOME}"
-else
+if [[ -z "${TARGET_HOME:-}" ]]; then
   TARGET_HOME="$(getent passwd "${TARGET_USER}" | cut -d: -f6 || true)"
   TARGET_HOME="${TARGET_HOME:-${HOME}}"
 fi
@@ -54,7 +52,8 @@ mkdir -p "${TARGET_HOME}"
 backup_if_exists() {
   local path="$1"
   if [[ -e "${path}" ]]; then
-    local backup_path="${path}.bak.$(date '+%Y%m%d-%H%M%S')"
+    local backup_path
+    backup_path="${path}.bak.$(date '+%Y%m%d-%H%M%S')"
     mv "${path}" "${backup_path}"
     log_info "Backed up ${path} -> ${backup_path}"
   fi

@@ -61,7 +61,9 @@ default_version_for_codename() {
 }
 
 sanitize_token() {
-  echo "$1" | sed 's/[^0-9A-Za-z._-]/_/g'
+  local token="$1"
+  token="${token//[^0-9A-Za-z._-]/_}"
+  echo "${token}"
 }
 
 usage() {

@@ -81,9 +81,30 @@ clone_and_archive() {
   local repo_url="$1"
   local folder_name="$2"
   local temp_dir="$3"
+  local max_retries=3
+  local attempt=1
+  local -a clone_cmd
 
   echo "Cloning ${repo_url}"
-  git clone --depth=1 "${repo_url}" "${temp_dir}/${folder_name}"
+  if command -v timeout >/dev/null 2>&1; then
+    clone_cmd=(timeout 180 git clone --depth=1 "${repo_url}" "${temp_dir}/${folder_name}")
+  else
+    clone_cmd=(git clone --depth=1 "${repo_url}" "${temp_dir}/${folder_name}")
+  fi
+  while (( attempt <= max_retries )); do
+    rm -rf "${temp_dir:?}/${folder_name}"
+    if "${clone_cmd[@]}"; then
+      break
+    fi
+    if (( attempt == max_retries )); then
+      echo "Failed to clone ${repo_url} after ${max_retries} attempts." >&2
+      return 1
+    fi
+    echo "Clone failed (attempt ${attempt}/${max_retries}), retrying in 3s..."
+    sleep 3
+    attempt=$((attempt + 1))
+  done
+
   rm -rf "${temp_dir:?}/${folder_name}/.git"
 
   echo "Packing ${folder_name}.tar.gz"

@@ -116,4 +116,6 @@ ls -la ~/.zshrc ~/.oh-my-zsh
 bash -n collect_target_params.sh prepare_online_bundle.sh fill_debs_on_ubuntu.sh offline/install_offline.sh
 ```
 
+仓库已配置 GitHub Actions CI，PR 时会自动执行语法检查、`shellcheck` 和基础 smoke 检查。
+
 更多规范见 `CONTRIBUTING.md`。

@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  lint-and-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure executable scripts
+        run: |
+          chmod +x collect_target_params.sh prepare_online_bundle.sh fill_debs_on_ubuntu.sh offline/install_offline.sh
+
+      - name: Bash syntax check
+        run: |
+          bash -n collect_target_params.sh prepare_online_bundle.sh fill_debs_on_ubuntu.sh offline/install_offline.sh
+
+      - name: Install shellcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Shellcheck
+        run: |
+          shellcheck collect_target_params.sh prepare_online_bundle.sh fill_debs_on_ubuntu.sh offline/install_offline.sh
+
+      - name: Help output smoke check
+        run: |
+          ./prepare_online_bundle.sh --help > /tmp/prepare_help.txt
+          ./fill_debs_on_ubuntu.sh --help > /tmp/fill_help.txt
+          grep -q -- "--target-codename" /tmp/prepare_help.txt
+          grep -q -- "--target-codename" /tmp/fill_help.txt
+
+      - name: Target parameter script smoke check
+        run: |
+          ./collect_target_params.sh > /tmp/target_params.txt
+          grep -q "Use this on your online machine:" /tmp/target_params.txt
+          grep -q -- "--target-codename" /tmp/target_params.txt

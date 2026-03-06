@@ -21,6 +21,26 @@
 1. 在线阶段：在可联网 Ubuntu 机器上运行 `prepare_online_bundle.sh` 构建离线包。
 2. 离线阶段：将离线包拷贝到目标机器，执行 `install_offline.sh` 完成安装。
 
+## 预构建 Release Assets（可直接下载）
+
+仓库 `Release` 中提供了预构建离线包（当前提供 `amd64`）：
+
+- Ubuntu 24.04 (`noble`)
+- Ubuntu 22.04 (`jammy`)
+- Ubuntu 20.04 (`focal`)
+
+使用规则：
+
+1. 目标机与离线包必须匹配：`Ubuntu codename + arch`（例如 `jammy + amd64`）。
+2. 匹配时可以直接下载对应 `.tar.gz` 到目标机离线安装。
+3. 不匹配时（版本/架构/源环境不同），请按本项目脚本自行构建目标机专用离线包。
+
+建议先做完整性校验（Release 中同时提供 `SHA256SUMS`）：
+
+```bash
+sha256sum -c SHA256SUMS
+```
+
 ## 快速开始
 
 ### 1) 在目标离线机采集参数
@@ -68,6 +88,12 @@ chmod +x install_offline.sh
 - 在线机器建议使用 Ubuntu（脚本依赖 `apt-get/apt-cache/dpkg`）。
 - 脚本只解析 `zsh` 直接依赖，并显式排除 `libc6`。
 - `powerlevel10k` 默认不启用，避免离线首启卡在 `fetching gitstatusd`。
+
+## 免责声明
+
+- 预构建离线包仅作为便利分发，不保证适配所有目标环境（特别是深度定制系统、锁版本、held packages、混合源环境）。
+- 预构建包中的 `.deb` 版本固定在构建时刻；安全更新和后续维护由使用者自行负责。
+- 在生产环境使用前，请先在同版本测试环境完成验证，并自行承担变更风险。
 
 ## 脚本说明
 

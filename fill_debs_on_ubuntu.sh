@@ -22,6 +22,14 @@ run_as_root() {
   "${SUDO_CMD[@]}" "$@"
 }
 
+log_info() {
+  echo "[$(date '+%H:%M:%S')] [INFO] $*"
+}
+
+log_warn() {
+  echo "[$(date '+%H:%M:%S')] [WARN] $*"
+}
+
 check_cmd() {
   local cmd="$1"
   if ! command -v "${cmd}" >/dev/null 2>&1; then
@@ -267,11 +275,11 @@ if [[ -z "${TARGET_VERSION}" ]]; then
 fi
 TARGET_VERSION="${TARGET_VERSION:-unknown}"
 
-echo "Host OS: ${HOST_OS_PRETTY}"
-echo "Target OS: ubuntu ${TARGET_VERSION} (${TARGET_CODENAME}), arch=${TARGET_ARCH}"
-echo "Target mirrors:"
-echo "  main: ${TARGET_MIRROR}"
-echo "  security: ${TARGET_SECURITY_MIRROR}"
+log_info "Host OS: ${HOST_OS_PRETTY}"
+log_info "Target OS: ubuntu ${TARGET_VERSION} (${TARGET_CODENAME}), arch=${TARGET_ARCH}"
+log_info "Target mirrors: main=${TARGET_MIRROR}, security=${TARGET_SECURITY_MIRROR}"
+log_info "Long-running steps ahead: apt metadata refresh and package download."
+log_info "If mirror/network is unstable, download may take longer."
 
 APT_CONTEXT_DIR=""
 APT_SOURCES_LIST=""
@@ -289,18 +297,19 @@ cleanup() {
 trap cleanup EXIT
 
 if [[ "${SKIP_HOST_SETUP}" -eq 0 ]]; then
-  echo "[1/5] Installing helper tools on online host"
+  log_info "[1/5] Installing helper tools on online host"
   run_as_root apt-get update
   run_as_root apt-get install -y ca-certificates tar
 else
-  echo "[1/5] Skipping host helper setup (--skip-host-setup)"
+  log_info "[1/5] Skipping host helper setup (--skip-host-setup)"
 fi
 
-echo "[2/5] Refreshing target package metadata (isolated apt context)"
+log_info "[2/5] Refreshing target package metadata (isolated apt context)"
+log_info "This step may take several minutes on slower mirrors."
 prepare_apt_context
 target_apt_get update
 
-echo "[3/5] Downloading zsh direct dependency deb files"
+log_info "[3/5] Downloading zsh direct dependency deb files"
 mapfile -t dep_packages < <({
   echo "zsh"
   target_apt_cache depends --no-recommends --no-suggests zsh \
@@ -317,21 +326,22 @@ rm -f "${DEB_DIR}"/*.deb
 
 declare -a failed_packages=()
 pushd "${DEB_DIR}" >/dev/null
+log_info "Resolved ${#dep_packages[@]} dependency package(s). Starting local .deb download..."
 for pkg in "${dep_packages[@]}"; do
   candidate="$(target_apt_cache policy "${pkg}" | awk '/Candidate:/ {c=$2} END {print c}')"
   if [[ -z "${candidate}" || "${candidate}" == "(none)" ]]; then
-    echo "Skipping ${pkg} (no candidate in target repository)"
+    log_warn "Skipping ${pkg} (no candidate in target repository)"
     failed_packages+=("${pkg}=<none>")
     continue
   fi
-  echo "Downloading deb: ${pkg}=${candidate}"
+  log_info "Downloading deb: ${pkg}=${candidate}"
   if ! target_apt_get download "${pkg}=${candidate}"; then
     failed_packages+=("${pkg}=${candidate}")
   fi
 done
 popd >/dev/null
 
-echo "[4/5] Syncing installer files into bundle"
+log_info "[4/5] Syncing installer files into bundle"
 cp "${OFFLINE_DIR}/install_offline.sh" "${BUNDLE_DIR}/install_offline.sh"
 cp "${OFFLINE_DIR}/zshrc.template" "${BUNDLE_DIR}/zshrc.template"
 chmod +x "${BUNDLE_DIR}/install_offline.sh"
@@ -356,7 +366,7 @@ chmod +x "${BUNDLE_DIR}/install_offline.sh"
   fi
 } >"${META_FILE}"
 
-echo "[5/5] Creating final offline tarball"
+log_info "[5/5] Creating final offline tarball"
 timestamp="$(date '+%Y%m%d-%H%M%S')"
 safe_target_version="$(sanitize_token "${TARGET_VERSION}")"
 safe_target_codename="$(sanitize_token "${TARGET_CODENAME}")"
@@ -365,11 +375,11 @@ final_tarball="${ROOT_DIR}/zsh-offline-bundle-ubuntu${safe_target_version}-${saf
 tar -czf "${final_tarball}" -C "${BUNDLE_DIR}" .
 
 deb_count="$(find "${DEB_DIR}" -type f -name '*.deb' | wc -l | tr -d ' ')"
-echo "Done: ${final_tarball}"
-echo "Downloaded deb count: ${deb_count}"
+log_info "Offline bundle ready: ${final_tarball}"
+log_info "Downloaded .deb count: ${deb_count}"
 if [[ ${#failed_packages[@]} -gt 0 ]]; then
-  echo "Failed package downloads: ${failed_packages[*]}"
+  log_warn "Failed package downloads: ${failed_packages[*]}"
 fi
 if [[ "${KEEP_APT_WORKDIR}" -eq 1 ]]; then
-  echo "Isolated apt workspace kept at: ${APT_CONTEXT_DIR}"
+  log_info "Isolated apt workspace kept at: ${APT_CONTEXT_DIR}"
 fi

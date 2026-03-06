@@ -50,6 +50,8 @@ bash collect_target_params.sh
 zsh-offline-bundle-ubuntu22.04.3-jammy-amd64-20260306-173000.tar.gz
 ```
 
+脚本会输出带时间戳的阶段日志（如 `[INFO] [1/6]`），在 `apt` 刷新、`.deb` 下载、`git clone` 等耗时步骤会提示“可能需要几分钟”；若网络不稳定，也会给出重试/等待提示。
+
 ### 3) 在离线目标机安装
 
 ```bash

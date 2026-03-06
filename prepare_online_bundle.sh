@@ -21,6 +21,14 @@ run_as_root() {
   "${SUDO_CMD[@]}" "$@"
 }
 
+log_info() {
+  echo "[$(date '+%H:%M:%S')] [INFO] $*"
+}
+
+log_warn() {
+  echo "[$(date '+%H:%M:%S')] [WARN] $*"
+}
+
 check_cmd() {
   local cmd="$1"
   if ! command -v "${cmd}" >/dev/null 2>&1; then
@@ -85,11 +93,12 @@ clone_and_archive() {
   local attempt=1
   local -a clone_cmd
 
-  echo "Cloning ${repo_url}"
+  log_info "Cloning ${repo_url}"
   if command -v timeout >/dev/null 2>&1; then
     clone_cmd=(timeout 180 git clone --depth=1 "${repo_url}" "${temp_dir}/${folder_name}")
   else
     clone_cmd=(git clone --depth=1 "${repo_url}" "${temp_dir}/${folder_name}")
+    log_warn "`timeout` is unavailable; clone timeout protection is disabled on this host."
   fi
   while (( attempt <= max_retries )); do
     rm -rf "${temp_dir:?}/${folder_name}"
@@ -100,14 +109,14 @@ clone_and_archive() {
       echo "Failed to clone ${repo_url} after ${max_retries} attempts." >&2
       return 1
     fi
-    echo "Clone failed (attempt ${attempt}/${max_retries}), retrying in 3s..."
+    log_warn "Clone failed (attempt ${attempt}/${max_retries}). Network may be unstable; retrying in 3s..."
     sleep 3
     attempt=$((attempt + 1))
   done
 
   rm -rf "${temp_dir:?}/${folder_name}/.git"
 
-  echo "Packing ${folder_name}.tar.gz"
+  log_info "Packing ${folder_name}.tar.gz"
   tar -czf "${ARCHIVE_DIR}/${folder_name}.tar.gz" -C "${temp_dir}" "${folder_name}"
 }
 
@@ -255,11 +264,11 @@ if [[ -z "${TARGET_VERSION}" ]]; then
 fi
 TARGET_VERSION="${TARGET_VERSION:-unknown}"
 
-echo "Host OS: ${HOST_OS_PRETTY}"
-echo "Target OS: ubuntu ${TARGET_VERSION} (${TARGET_CODENAME}), arch=${TARGET_ARCH}"
-echo "Target mirrors:"
-echo "  main: ${TARGET_MIRROR}"
-echo "  security: ${TARGET_SECURITY_MIRROR}"
+log_info "Host OS: ${HOST_OS_PRETTY}"
+log_info "Target OS: ubuntu ${TARGET_VERSION} (${TARGET_CODENAME}), arch=${TARGET_ARCH}"
+log_info "Target mirrors: main=${TARGET_MIRROR}, security=${TARGET_SECURITY_MIRROR}"
+log_info "Long-running steps ahead: apt metadata refresh, package download, and git clone."
+log_info "If GitHub/network is unstable, clone uses timeout=180s and retries up to 3 times."
 
 TMP_REPO_DIR=""
 APT_CONTEXT_DIR=""
@@ -281,22 +290,23 @@ cleanup() {
 trap cleanup EXIT
 
 if [[ "${SKIP_HOST_SETUP}" -eq 0 ]]; then
-  echo "[1/6] Installing helper tools on online host"
+  log_info "[1/6] Installing helper tools on online host"
   run_as_root apt-get update
   run_as_root apt-get install -y ca-certificates git tar
 else
-  echo "[1/6] Skipping host helper setup (--skip-host-setup)"
+  log_info "[1/6] Skipping host helper setup (--skip-host-setup)"
 fi
 
-echo "[2/6] Preparing bundle directory"
+log_info "[2/6] Preparing bundle directory"
 rm -rf "${BUNDLE_DIR}"
 mkdir -p "${DEB_DIR}" "${ARCHIVE_DIR}"
 
-echo "[3/6] Refreshing target package metadata (isolated apt context)"
+log_info "[3/6] Refreshing target package metadata (isolated apt context)"
+log_info "This step may take several minutes on slower mirrors."
 prepare_apt_context
 target_apt_get update
 
-echo "[4/6] Downloading zsh deb packages and direct dependencies"
+log_info "[4/6] Downloading zsh deb packages and direct dependencies"
 mapfile -t dep_packages < <({
   echo "zsh"
   target_apt_cache depends --no-recommends --no-suggests zsh \
@@ -310,21 +320,22 @@ fi
 
 declare -a failed_packages=()
 pushd "${DEB_DIR}" >/dev/null
+log_info "Resolved ${#dep_packages[@]} dependency package(s). Starting local .deb download..."
 for pkg in "${dep_packages[@]}"; do
   candidate="$(target_apt_cache policy "${pkg}" | awk '/Candidate:/ {c=$2} END {print c}')"
   if [[ -z "${candidate}" || "${candidate}" == "(none)" ]]; then
-    echo "Skipping ${pkg} (no candidate in target repository)"
+    log_warn "Skipping ${pkg} (no candidate in target repository)"
     failed_packages+=("${pkg}=<none>")
     continue
   fi
-  echo "Downloading deb: ${pkg}=${candidate}"
+  log_info "Downloading deb: ${pkg}=${candidate}"
   if ! target_apt_get download "${pkg}=${candidate}"; then
     failed_packages+=("${pkg}=${candidate}")
   fi
 done
 popd >/dev/null
 
-echo "[5/6] Downloading oh-my-zsh and plugins/themes"
+log_info "[5/6] Downloading oh-my-zsh and plugins/themes"
 TMP_REPO_DIR="$(mktemp -d)"
 clone_and_archive "https://github.com/ohmyzsh/ohmyzsh.git" "oh-my-zsh" "${TMP_REPO_DIR}"
 clone_and_archive "https://github.com/zsh-users/zsh-autosuggestions.git" "zsh-autosuggestions" "${TMP_REPO_DIR}"
@@ -356,7 +367,7 @@ chmod +x "${BUNDLE_DIR}/install_offline.sh"
   fi
 } >"${BUNDLE_DIR}/metadata.txt"
 
-echo "[6/6] Creating distributable tarball"
+log_info "[6/6] Creating distributable tarball"
 timestamp="$(date '+%Y%m%d-%H%M%S')"
 safe_target_version="$(sanitize_token "${TARGET_VERSION}")"
 safe_target_codename="$(sanitize_token "${TARGET_CODENAME}")"
@@ -365,11 +376,11 @@ final_tarball="${ROOT_DIR}/zsh-offline-bundle-ubuntu${safe_target_version}-${saf
 tar -czf "${final_tarball}" -C "${BUNDLE_DIR}" .
 
 deb_count="$(find "${DEB_DIR}" -type f -name '*.deb' | wc -l | tr -d ' ')"
-echo "Offline bundle ready: ${final_tarball}"
-echo "Downloaded .deb count: ${deb_count}"
+log_info "Offline bundle ready: ${final_tarball}"
+log_info "Downloaded .deb count: ${deb_count}"
 if [[ ${#failed_packages[@]} -gt 0 ]]; then
-  echo "Failed package downloads: ${failed_packages[*]}"
+  log_warn "Failed package downloads: ${failed_packages[*]}"
 fi
 if [[ "${KEEP_APT_WORKDIR}" -eq 1 ]]; then
-  echo "Isolated apt workspace kept at: ${APT_CONTEXT_DIR}"
+  log_info "Isolated apt workspace kept at: ${APT_CONTEXT_DIR}"
 fi

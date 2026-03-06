@@ -290,7 +290,7 @@ fi
 declare -a failed_packages=()
 pushd "${DEB_DIR}" >/dev/null
 for pkg in "${dep_packages[@]}"; do
-  candidate="$(target_apt_cache policy "${pkg}" | awk '/Candidate:/ {print $2; exit}')"
+  candidate="$(target_apt_cache policy "${pkg}" | awk '/Candidate:/ {c=$2} END {print c}')"
   if [[ -z "${candidate}" || "${candidate}" == "(none)" ]]; then
     echo "Skipping ${pkg} (no candidate in target repository)"
     failed_packages+=("${pkg}=<none>")
